@@ -12,6 +12,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 OBJ_DIR <- "analysis/objects/imc"
 PLOT_DIR <- "analysis/plots/imc"

@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 IMC_DIR <- "/data/projects/HCCbone/data/IMC/27038840_Hiemens"
 PLOT_DIR <- "analysis/plots/imc"
@@ -26,14 +27,27 @@ sink(log_con, type = "output", split = TRUE)
 sink(log_con, type = "message")
 
 cat("=== IMC Preprocessing ===\n")
+cat("\n--- Sample Mapping ---\n")
+print_sample_mapping()
 
 txt_files <- list.files(IMC_DIR, pattern = "\\.txt$", full.names = TRUE)
-cat("Found", length(txt_files), "TXT files:\n")
-for (f in txt_files) cat("  ", basename(f), "\n")
+cat("\nFound", length(txt_files), "TXT files:\n")
+for (f in txt_files) {
+  sample_base <- gsub("_\\d+_\\d+\\.txt$", "", basename(f))
+  tissue <- get_tissue_from_imc(sample_base)
+  tissue_label <- if (!is.na(tissue)) get_tissue_label(tissue) else "Unknown"
+  cat(sprintf("  %s -> %s\n", basename(f), tissue_label))
+}
 
 process_imc_txt <- function(txt_path) {
   sample_name <- gsub("\\.txt$", "", basename(txt_path))
+  sample_base <- gsub("_\\d+_\\d+$", "", sample_name)
+  tissue_type <- get_tissue_from_imc(sample_base)
+  tissue_label <- if (!is.na(tissue_type)) get_tissue_label(tissue_type) else "Unknown"
+  
   cat("\n--- Processing:", sample_name, "---\n")
+  cat("Tissue type:", tissue_label, "\n")
+  cat("Matched Visium sample:", get_matched_visium(sample_base), "\n")
   
   dat <- tryCatch(fread(txt_path, header = TRUE), error = function(e) { cat("Error:", e$message, "\n"); NULL })
   if (is.null(dat)) return(NULL)

@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 OBJ_DIR <- "analysis/objects"
 PLOT_DIR <- "analysis/plots/summary"
