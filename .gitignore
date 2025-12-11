@@ -1,0 +1,65 @@
+# Data files
+*.rds
+*.RDS
+*.rda
+*.RData
+*.h5
+*.h5ad
+
+# Large data directories
+data/
+results/spaceranger/
+analysis/objects/
+analysis/logs/*.out
+analysis/logs/*.err
+
+# IMC raw data
+*.tiff
+*.tif
+*.mcd
+
+# Visium images
+*.vmic
+
+# Temporary files
+*.tmp
+*~
+.Rhistory
+.RData
+.Ruserdata
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Slurm output in root
+slurm-*.out
+slurm-*.err
+
+# Archive folder
+scripts/archive/
+scripts/spata2/archive/
+scripts/giotto/
+
+# Fastq data
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Keep logs directory structure but not content
+!analysis/logs/.gitkeep
+
+# Keep objects directory structure
+!analysis/objects/.gitkeep
+
+# Keep plots directory structure
+!analysis/plots/.gitkeep
+
+# Keep tables directory structure  
+!analysis/tables/.gitkeep
