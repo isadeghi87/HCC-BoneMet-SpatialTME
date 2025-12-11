@@ -300,11 +300,22 @@ export_nk <- function(obj, output_prefix, tissue_label) {
   nk_cols <- grep("nk|ncr1|ncam|nkg7|klr", names(plot_df), value = TRUE, ignore.case = TRUE)
   for (col in nk_cols[1:min(4, length(nk_cols))]) {
     if (!all(is.na(plot_df[[col]]))) {
-      p <- ggplot(plot_df, aes(x = x, y = y, color = .data[[col]])) +
-        geom_point(size = 0.2, alpha = 0.85, shape = 16, stroke = 0) +
-        scale_color_gradientn(colors = GRADIENT_COLORS, na.value = "#d9d9d9") +
-        coord_fixed() + theme_publication() +
-        labs(title = paste(tissue_label, "-", col, "(ST)"), color = "Score")
+      # Check if numeric or categorical
+      if (is.numeric(plot_df[[col]])) {
+        p <- ggplot(plot_df, aes(x = x, y = y, color = .data[[col]])) +
+          geom_point(size = 0.2, alpha = 0.85, shape = 16, stroke = 0) +
+          scale_color_gradientn(colors = GRADIENT_COLORS, na.value = "#d9d9d9") +
+          coord_fixed() + theme_publication() +
+          labs(title = paste(tissue_label, "-", col, "(ST)"), color = "Score")
+      } else {
+        # Categorical/logical variable
+        p <- ggplot(plot_df, aes(x = x, y = y, color = as.factor(.data[[col]]))) +
+          geom_point(size = 0.2, alpha = 0.85, shape = 16, stroke = 0) +
+          scale_color_manual(values = c("FALSE" = "#d9d9d9", "TRUE" = "#e41a1c", 
+                                        "Low" = "#377eb8", "High" = "#e41a1c")) +
+          coord_fixed() + theme_publication() +
+          labs(title = paste(tissue_label, "-", col, "(ST)"), color = col)
+      }
       save_plot(p, file.path(plot_dir, paste0(output_prefix, "_ST_", gsub("[^A-Za-z0-9]", "_", col), ".png")), width = 12, height = 10)
     }
   }
