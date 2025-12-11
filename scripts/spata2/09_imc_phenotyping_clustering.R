@@ -33,6 +33,23 @@ process_imc_clustering <- function(sample_path) {
   sample_name <- gsub("_processed\\.rds$", "", basename(sample_path))
   cat("\n--- Processing:", sample_name, "---\n")
   
+  # Extract standardized naming components
+  # Parse sample name to get base (e.g., "27038840_Biopsy_Spine" from "27038840_Biopsy_Spine_1_1")
+  base_sample <- sub("_\\d+_\\d+$", "", sample_name)
+  roi_match <- regmatches(sample_name, regexpr("\\d+_\\d+$", sample_name))
+  roi_num <- if (length(roi_match) > 0) as.integer(sub("_.*", "", roi_match)) else 1
+  roi_label <- paste0("ROI", roi_num)
+  
+  # Get standardized output prefix and tissue label
+  output_prefix <- get_output_prefix(base_sample)
+  tissue_type <- get_tissue_from_imc(base_sample)
+  tissue_label <- if (!is.na(tissue_type)) get_tissue_label(tissue_type) else sample_name
+  
+  cat("  Base sample:", base_sample, "\n")
+  cat("  ROI:", roi_label, "\n")
+  cat("  Output prefix:", output_prefix, "\n")
+  cat("  Tissue label:", tissue_label, "\n")
+  
   dat <- readRDS(sample_path)
   expr_norm <- dat$expr_norm
   coords <- dat$coords
@@ -86,20 +103,21 @@ process_imc_clustering <- function(sample_path) {
   rownames(cluster_profiles) <- paste0("C", cluster_profiles$cluster)
   cluster_profiles$cluster <- NULL
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   # HIGH-QUALITY heatmap
-  png(file.path(sample_plot_dir, "cluster_heatmap.png"), width = 1400, height = 1000, res = 150)
+  heatmap_file <- paste0(output_prefix, "_IMC_", roi_label, "_cluster_heatmap.png")
+  png(file.path(sample_plot_dir, heatmap_file), width = 1400, height = 1000, res = 150)
   tryCatch({
     pheatmap(
       as.matrix(cluster_profiles),
       scale = "column",
       cluster_rows = TRUE, cluster_cols = TRUE,
       color = colorRampPalette(c("#2166ac", "#f7f7f7", "#b2182b"))(100),
-      main = paste(sample_name, "- Cluster Profiles"),
+      main = paste(tissue_label, "-", roi_label, "- Cluster Profiles"),
       fontsize = 10, fontsize_row = 9, fontsize_col = 8
     )
   }, error = function(e) cat("Heatmap error:", e$message, "\n"))
@@ -113,9 +131,10 @@ process_imc_clustering <- function(sample_path) {
       geom_point(size = 0.15, alpha = 0.7, shape = 16, stroke = 0) +
       scale_color_manual(values = c(DISCRETE_COLORS, brewer.pal(8, "Dark2"))) +
       coord_fixed() + theme_publication() +
-      labs(title = paste(sample_name, "- Cluster Spatial"), color = "Cluster") +
+      labs(title = paste(tissue_label, "-", roi_label, "- Cluster Spatial"), color = "Cluster") +
       guides(color = guide_legend(ncol = 2, override.aes = list(size = 3)))
-    save_plot(p_spatial, file.path(sample_plot_dir, "cluster_spatial.png"), width = 12, height = 10)
+    spatial_file <- paste0(output_prefix, "_IMC_", roi_label, "_cluster_spatial.png")
+    save_plot(p_spatial, file.path(sample_plot_dir, spatial_file), width = 12, height = 10)
   }
   
   # Basic annotation
@@ -145,11 +164,13 @@ process_imc_clustering <- function(sample_path) {
   cat("Annotations:\n")
   print(table(annotations))
   
-  write.csv(cluster_profiles, file.path(sample_table_dir, "cluster_profiles.csv"))
-  write.csv(dat$annotations, file.path(sample_table_dir, "cluster_annotations.csv"), row.names = FALSE)
+  profiles_file <- paste0(output_prefix, "_IMC_", roi_label, "_cluster_profiles.csv")
+  annotations_file <- paste0(output_prefix, "_IMC_", roi_label, "_cluster_annotations.csv")
+  write.csv(cluster_profiles, file.path(sample_table_dir, profiles_file))
+  write.csv(dat$annotations, file.path(sample_table_dir, annotations_file), row.names = FALSE)
   
   saveRDS(dat, sample_path)
-  cat("Done:", sample_name, "\n")
+  cat("Done:", sample_name, "(saved as", output_prefix, "_IMC_", roi_label, ")\n")
 }
 
 processed_files <- list.files(OBJ_DIR, pattern = "_processed\\.rds$", full.names = TRUE)

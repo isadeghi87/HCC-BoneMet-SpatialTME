@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/salie"
 TABLE_DIR <- "analysis/tables/salie"
@@ -37,6 +38,9 @@ calc_score <- function(expr_mtr, markers, genes) {
 
 analyze_salie <- function(obj_path, sample_name) {
   cat("\n--- Processing:", sample_name, "---\n")
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
   obj <- readRDS(obj_path)
   genes <- rownames(getMatrix(obj))
   expr_mtr <- getMatrix(obj, mtr_name = "LogNormalize")
@@ -59,7 +63,7 @@ analyze_salie <- function(obj_path, sample_name) {
   coords <- getCoordsDf(obj)
   plot_df <- merge(coords, obj@meta_obs, by = "barcodes")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   scores <- c("col4a1_score", "dc_score", "tls_score", "exclusion_score")
@@ -79,9 +83,9 @@ analyze_salie <- function(obj_path, sample_name) {
   
   if (length(plots) > 0) {
     combined <- wrap_plots(plots[!sapply(plots, is.null)], ncol = 2) +
-      plot_annotation(title = paste(sample_name, "- Salié Immunotype"),
+      plot_annotation(title = paste(tissue_label, "- Salié Immunotype"),
                       theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
-    save_plot(combined, file.path(sample_plot_dir, "salie_combined.png"), width = 14, height = 12)
+    save_plot(combined, file.path(sample_plot_dir, paste0(output_prefix, "_ST_salie_combined.png")), width = 14, height = 12)
   }
   
   # TLS hotspot map
@@ -90,9 +94,9 @@ analyze_salie <- function(obj_path, sample_name) {
       geom_point(size = 0.3, alpha = 0.85, shape = 16, stroke = 0) +
       scale_color_manual(values = c("TLS-high" = "#d62728", "TLS-low" = "#d9d9d9")) +
       coord_fixed() + theme_publication() +
-      labs(title = paste(sample_name, "- TLS Hotspots (Top 10%)"), color = "Status") +
+      labs(title = paste(tissue_label, "- TLS Hotspots (Top 10%)"), color = "Status") +
       guides(color = guide_legend(override.aes = list(size = 4)))
-    save_plot(p_tls, file.path(sample_plot_dir, "tls_hotspots.png"), width = 12, height = 10)
+    save_plot(p_tls, file.path(sample_plot_dir, paste0(output_prefix, "_ST_tls_hotspots.png")), width = 12, height = 10)
   }
   
   # Co-localisation: TLS with CD8-high
@@ -102,7 +106,7 @@ analyze_salie <- function(obj_path, sample_name) {
     print(contingency)
   }
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   stats_df <- data.frame(
@@ -112,7 +116,7 @@ analyze_salie <- function(obj_path, sample_name) {
     tls_mean = mean(obj@meta_obs$tls_score, na.rm = TRUE),
     exclusion_mean = mean(obj@meta_obs$exclusion_score, na.rm = TRUE)
   )
-  write.csv(stats_df, file.path(sample_table_dir, "salie_stats.csv"), row.names = FALSE)
+  write.csv(stats_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_salie_stats.csv")), row.names = FALSE)
   
   saveRDS(obj, obj_path)
   cat("Done:", sample_name, "\n")

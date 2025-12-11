@@ -284,6 +284,23 @@ process_imc_spatial_comprehensive <- function(sample_path) {
   cat("Processing:", sample_name, "\n")
   cat(strrep("=", 60), "\n")
   
+  # Extract standardized naming components
+  # Parse sample name to get base (e.g., "27038840_Biopsy_Spine" from "27038840_Biopsy_Spine_1_1")
+  base_sample <- sub("_\\d+_\\d+$", "", sample_name)
+  roi_match <- regmatches(sample_name, regexpr("\\d+_\\d+$", sample_name))
+  roi_num <- if (length(roi_match) > 0) as.integer(sub("_.*", "", roi_match)) else 1
+  roi_label <- paste0("ROI", roi_num)
+  
+  # Get standardized output prefix and tissue label
+  output_prefix <- get_output_prefix(base_sample)
+  tissue_type <- get_tissue_from_imc(base_sample)
+  tissue_label <- if (!is.na(tissue_type)) get_tissue_label(tissue_type) else sample_name
+  
+  cat("  Base sample:", base_sample, "\n")
+  cat("  ROI:", roi_label, "\n")
+  cat("  Output prefix:", output_prefix, "\n")
+  cat("  Tissue label:", tissue_label, "\n")
+  
   dat <- readRDS(sample_path)
   
   if (is.null(dat$coords)) { cat("No coordinates, skipping\n"); return(NULL) }
@@ -294,8 +311,8 @@ process_imc_spatial_comprehensive <- function(sample_path) {
   
   cat("Cells:", nrow(coords), ", Clusters:", length(unique(clusters)), "\n\n")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name, "spatial")
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix, "spatial")
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
@@ -318,7 +335,8 @@ process_imc_spatial_comprehensive <- function(sample_path) {
           igraph::components(spatial_graph)$no
         )
       )
-      write.csv(graph_stats, file.path(sample_table_dir, "graph_statistics.csv"), row.names = FALSE)
+      graph_stats_file <- paste0(output_prefix, "_IMC_", roi_label, "_graph_statistics.csv")
+      write.csv(graph_stats, file.path(sample_table_dir, graph_stats_file), row.names = FALSE)
     }
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
@@ -330,7 +348,8 @@ process_imc_spatial_comprehensive <- function(sample_path) {
     
     cn_df <- as.data.frame(cn_result$normalized[cn_result$sample_idx, ])
     cn_df$cell_cluster <- clusters[cn_result$sample_idx]
-    write.csv(cn_df, file.path(sample_table_dir, "cellular_neighborhoods.csv"), row.names = FALSE)
+    cn_table_file <- paste0(output_prefix, "_IMC_", roi_label, "_cellular_neighborhoods.csv")
+    write.csv(cn_df, file.path(sample_table_dir, cn_table_file), row.names = FALSE)
     
     cn_summary <- cn_df %>%
       group_by(cell_cluster) %>%
@@ -342,9 +361,10 @@ process_imc_spatial_comprehensive <- function(sample_path) {
       scale_fill_gradientn(colors = GRADIENT_VIRIDIS) +
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = paste(sample_name, "- Cellular Neighborhood Composition"),
+      labs(title = paste(tissue_label, "-", roi_label, "- Cellular Neighborhood Composition"),
            x = "Cell Type", y = "Neighbor Type", fill = "Proportion")
-    save_plot(p_cn, file.path(sample_plot_dir, "cellular_neighborhoods.png"), width = 10, height = 8)
+    cn_plot_file <- paste0(output_prefix, "_IMC_", roi_label, "_cellular_neighborhoods.png")
+    save_plot(p_cn, file.path(sample_plot_dir, cn_plot_file), width = 10, height = 8)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   # 3. Spatial Community Detection
@@ -354,10 +374,12 @@ process_imc_spatial_comprehensive <- function(sample_path) {
     results$communities <- communities
     
     comm_df <- data.frame(x = coords$x, y = coords$y, cluster = clusters, community = communities$membership)
-    write.csv(comm_df, file.path(sample_table_dir, "spatial_communities.csv"), row.names = FALSE)
+    comm_table_file <- paste0(output_prefix, "_IMC_", roi_label, "_spatial_communities.csv")
+    write.csv(comm_df, file.path(sample_table_dir, comm_table_file), row.names = FALSE)
     
     if (nrow(communities$composition) > 0) {
-      write.csv(communities$composition, file.path(sample_table_dir, "community_composition.csv"), row.names = FALSE)
+      comp_table_file <- paste0(output_prefix, "_IMC_", roi_label, "_community_composition.csv")
+      write.csv(communities$composition, file.path(sample_table_dir, comp_table_file), row.names = FALSE)
     }
     
     plot_df <- comm_df %>% filter(community > 0)
@@ -367,8 +389,9 @@ process_imc_spatial_comprehensive <- function(sample_path) {
         scale_color_manual(values = DISCRETE_COLORS) +
         HQ_THEME() +
         coord_fixed() +
-        labs(title = paste(sample_name, "- Spatial Communities"), x = "X (µm)", y = "Y (µm)", color = "Community")
-      save_plot(p_comm, file.path(sample_plot_dir, "spatial_communities.png"), width = 12, height = 10)
+        labs(title = paste(tissue_label, "-", roi_label, "- Spatial Communities"), x = "X (µm)", y = "Y (µm)", color = "Community")
+      comm_plot_file <- paste0(output_prefix, "_IMC_", roi_label, "_spatial_communities.png")
+      save_plot(p_comm, file.path(sample_plot_dir, comm_plot_file), width = 12, height = 10)
     }
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
@@ -382,15 +405,17 @@ process_imc_spatial_comprehensive <- function(sample_path) {
       data.frame(cluster = cl, n_patches = patches[[cl]]$n_patches,
                  mean_size = patches[[cl]]$mean_size, max_size = patches[[cl]]$max_size)
     }))
-    write.csv(patch_summary, file.path(sample_table_dir, "patch_summary.csv"), row.names = FALSE)
+    patch_table_file <- paste0(output_prefix, "_IMC_", roi_label, "_patch_summary.csv")
+    write.csv(patch_summary, file.path(sample_table_dir, patch_table_file), row.names = FALSE)
     
     p_patches <- ggplot(patch_summary, aes(x = reorder(cluster, -n_patches), y = n_patches, fill = mean_size)) +
       geom_col(width = 0.7) +
       scale_fill_gradientn(colors = GRADIENT_INFERNO) +
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = paste(sample_name, "- Cell Type Patches"), x = "Cell Type", y = "Number of Patches", fill = "Mean Size")
-    save_plot(p_patches, file.path(sample_plot_dir, "patch_detection.png"), width = 10, height = 6)
+      labs(title = paste(tissue_label, "-", roi_label, "- Cell Type Patches"), x = "Cell Type", y = "Number of Patches", fill = "Mean Size")
+    patch_plot_file <- paste0(output_prefix, "_IMC_", roi_label, "_patch_detection.png")
+    save_plot(p_patches, file.path(sample_plot_dir, patch_plot_file), width = 10, height = 6)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   # 5. Interaction Enrichment Analysis
@@ -399,9 +424,12 @@ process_imc_spatial_comprehensive <- function(sample_path) {
     interactions <- compute_interaction_enrichment(coords, clusters, radius = 30, n_permutations = 50)
     results$interactions <- interactions
     
-    write.csv(interactions$observed, file.path(sample_table_dir, "interaction_observed.csv"))
-    write.csv(interactions$z_scores, file.path(sample_table_dir, "interaction_zscore.csv"))
-    write.csv(interactions$p_values, file.path(sample_table_dir, "interaction_pvalues.csv"))
+    obs_file <- paste0(output_prefix, "_IMC_", roi_label, "_interaction_observed.csv")
+    zscore_file <- paste0(output_prefix, "_IMC_", roi_label, "_interaction_zscore.csv")
+    pval_file <- paste0(output_prefix, "_IMC_", roi_label, "_interaction_pvalues.csv")
+    write.csv(interactions$observed, file.path(sample_table_dir, obs_file))
+    write.csv(interactions$z_scores, file.path(sample_table_dir, zscore_file))
+    write.csv(interactions$p_values, file.path(sample_table_dir, pval_file))
     
     z_melt <- melt(interactions$z_scores)
     colnames(z_melt) <- c("Source", "Target", "Z_score")
@@ -412,16 +440,18 @@ process_imc_spatial_comprehensive <- function(sample_path) {
       scale_fill_gradientn(colors = DIVERGENT_RDBU, limits = c(-5, 5)) +
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = paste(sample_name, "- Interaction Enrichment"),
+      labs(title = paste(tissue_label, "-", roi_label, "- Interaction Enrichment"),
            subtitle = "Z-score: >0 enriched (red), <0 avoided (blue)",
            x = "Target", y = "Source", fill = "Z-score")
-    save_plot(p_zscore, file.path(sample_plot_dir, "interaction_enrichment.png"), width = 10, height = 8)
+    interaction_plot_file <- paste0(output_prefix, "_IMC_", roi_label, "_interaction_enrichment.png")
+    save_plot(p_zscore, file.path(sample_plot_dir, interaction_plot_file), width = 10, height = 8)
     
     sig_interactions <- z_melt %>%
       left_join(melt(interactions$p_values) %>% rename(Source = Var1, Target = Var2, p_value = value), by = c("Source", "Target")) %>%
       filter(p_value < 0.05) %>%
       arrange(desc(abs(Z_score)))
-    write.csv(sig_interactions, file.path(sample_table_dir, "significant_interactions.csv"), row.names = FALSE)
+    sig_file <- paste0(output_prefix, "_IMC_", roi_label, "_significant_interactions.csv")
+    write.csv(sig_interactions, file.path(sample_table_dir, sig_file), row.names = FALSE)
     cat("    Significant interactions:", nrow(sig_interactions), "\n")
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
@@ -431,16 +461,19 @@ process_imc_spatial_comprehensive <- function(sample_path) {
     spatial_context <- analyze_spatial_context(coords, clusters, grid_size = 50)
     results$spatial_context <- spatial_context
     
-    write.csv(spatial_context$density, file.path(sample_table_dir, "spatial_density.csv"), row.names = FALSE)
-    write.csv(spatial_context$hotspots, file.path(sample_table_dir, "spatial_hotspots.csv"), row.names = FALSE)
+    density_file <- paste0(output_prefix, "_IMC_", roi_label, "_spatial_density.csv")
+    hotspots_file <- paste0(output_prefix, "_IMC_", roi_label, "_spatial_hotspots.csv")
+    write.csv(spatial_context$density, file.path(sample_table_dir, density_file), row.names = FALSE)
+    write.csv(spatial_context$hotspots, file.path(sample_table_dir, hotspots_file), row.names = FALSE)
     
     p_density <- ggplot(spatial_context$density, aes(x = x_bin, y = y_bin, fill = n_cells)) +
       geom_tile() +
       scale_fill_gradientn(colors = GRADIENT_INFERNO) +
       HQ_THEME() +
       coord_fixed() +
-      labs(title = paste(sample_name, "- Cell Density Map"), x = "X grid", y = "Y grid", fill = "Cells")
-    save_plot(p_density, file.path(sample_plot_dir, "cell_density_map.png"), width = 10, height = 8)
+      labs(title = paste(tissue_label, "-", roi_label, "- Cell Density Map"), x = "X grid", y = "Y grid", fill = "Cells")
+    density_plot_file <- paste0(output_prefix, "_IMC_", roi_label, "_cell_density_map.png")
+    save_plot(p_density, file.path(sample_plot_dir, density_plot_file), width = 10, height = 8)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   # 7. Spatial Visualization (Cell type map)
@@ -454,16 +487,17 @@ process_imc_spatial_comprehensive <- function(sample_path) {
       scale_color_manual(values = DISCRETE_COLORS[1:length(unique(clusters))]) +
       HQ_THEME() +
       coord_fixed() +
-      labs(title = paste(sample_name, "- Cell Type Spatial Map"), x = "X (µm)", y = "Y (µm)", color = "Cluster") +
+      labs(title = paste(tissue_label, "-", roi_label, "- Cell Type Spatial Map"), x = "X (µm)", y = "Y (µm)", color = "Cluster") +
       guides(color = guide_legend(override.aes = list(size = 3, alpha = 1)))
-    save_plot(p_spatial, file.path(sample_plot_dir, "celltype_spatial_map.png"), width = 14, height = 12)
+    spatial_map_file <- paste0(output_prefix, "_IMC_", roi_label, "_celltype_spatial_map.png")
+    save_plot(p_spatial, file.path(sample_plot_dir, spatial_map_file), width = 14, height = 12)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   dat$spatial_analysis <- results
   saveRDS(dat, sample_path)
   
-  cat("\n✓ Spatial analysis complete for", sample_name, "\n")
-  return(results)
+  cat("\n✓ Spatial analysis complete for", sample_name, "(saved as", output_prefix, "IMC", roi_label, ")\n")
+  return(list(results = results, output_prefix = output_prefix, roi_label = roi_label))
 }
 
 # ============================================================================
@@ -486,9 +520,13 @@ cat("Cross-Sample Summary\n")
 cat(strrep("=", 60), "\n")
 
 all_patches <- do.call(rbind, lapply(names(all_results), function(s) {
-  if (!is.null(all_results[[s]]$patches)) {
-    patch_df <- do.call(rbind, lapply(names(all_results[[s]]$patches), function(cl) {
-      data.frame(sample = s, cluster = cl, n_patches = all_results[[s]]$patches[[cl]]$n_patches, mean_size = all_results[[s]]$patches[[cl]]$mean_size)
+  res <- all_results[[s]]
+  if (!is.null(res) && !is.null(res$results$patches)) {
+    output_prefix <- res$output_prefix
+    roi_label <- res$roi_label
+    patch_df <- do.call(rbind, lapply(names(res$results$patches), function(cl) {
+      data.frame(sample = s, output_prefix = output_prefix, roi = roi_label, cluster = cl, 
+                 n_patches = res$results$patches[[cl]]$n_patches, mean_size = res$results$patches[[cl]]$mean_size)
     }))
     return(patch_df)
   }
@@ -496,15 +534,15 @@ all_patches <- do.call(rbind, lapply(names(all_results), function(s) {
 }))
 
 if (!is.null(all_patches) && nrow(all_patches) > 0) {
-  write.csv(all_patches, file.path(TABLE_DIR, "all_samples_patch_summary.csv"), row.names = FALSE)
+  write.csv(all_patches, file.path(TABLE_DIR, "IMC_combined_patch_summary.csv"), row.names = FALSE)
   
-  p_all_patches <- ggplot(all_patches, aes(x = cluster, y = n_patches, fill = sample)) +
+  p_all_patches <- ggplot(all_patches, aes(x = cluster, y = n_patches, fill = paste(output_prefix, roi))) +
     geom_col(position = "dodge", width = 0.7) +
     scale_fill_manual(values = DISCRETE_COLORS) +
     HQ_THEME() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = "Patch Detection Across Samples", x = "Cell Type", y = "Number of Patches")
-  save_plot(p_all_patches, file.path(PLOT_DIR, "all_samples_patches.png"), width = 14, height = 8)
+    labs(title = "IMC Patch Detection Across All Samples", x = "Cell Type", y = "Number of Patches", fill = "Sample")
+  save_plot(p_all_patches, file.path(PLOT_DIR, "IMC_combined_patch_summary.png"), width = 14, height = 8)
 }
 
 cat("\n=== Comprehensive IMC Spatial Analysis Complete ===\n")

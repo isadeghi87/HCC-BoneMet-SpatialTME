@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/cd8_spatial"
 TABLE_DIR <- "analysis/tables/cd8_spatial"
@@ -28,6 +29,9 @@ CD8_MARKERS <- c("CD8A", "CD8B")
 
 analyze_cd8_spatial <- function(obj_path, sample_name) {
   cat("\n--- Processing:", sample_name, "---\n")
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
   obj <- readRDS(obj_path)
   cat("Loaded object with", nrow(obj@meta_obs), "spots\n")
   
@@ -63,7 +67,7 @@ analyze_cd8_spatial <- function(obj_path, sample_name) {
   coords <- getCoordsDf(obj)
   plot_df <- merge(coords, obj@meta_obs, by = "barcodes")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   # CD8 score spatial map
@@ -72,17 +76,17 @@ analyze_cd8_spatial <- function(obj_path, sample_name) {
     scale_color_gradientn(colors = GRADIENT_COLORS, na.value = "#d9d9d9") +
     coord_fixed() + theme_publication() +
     theme(legend.key.width = unit(1.5, "cm")) +
-    labs(title = paste(sample_name, "- CD8 Score"), color = "CD8 Score")
-  save_plot(p_score, file.path(sample_plot_dir, "cd8_score_spatial.png"), width = 12, height = 10)
+    labs(title = paste(tissue_label, "- CD8 Score"), color = "CD8 Score")
+  save_plot(p_score, file.path(sample_plot_dir, paste0(output_prefix, "_ST_cd8_score_spatial.png")), width = 12, height = 10)
   
   # CD8-high/low map
   p_high <- ggplot(plot_df, aes(x = x, y = y, color = cd8_high)) +
     geom_point(size = 0.3, alpha = 0.85, shape = 16, stroke = 0) +
     scale_color_manual(values = c("CD8-high" = "#d62728", "CD8-low" = "#d9d9d9")) +
     coord_fixed() + theme_publication() +
-    labs(title = paste(sample_name, "- CD8-high Regions"), color = "Status") +
+    labs(title = paste(tissue_label, "- CD8-high Regions"), color = "Status") +
     guides(color = guide_legend(override.aes = list(size = 4)))
-  save_plot(p_high, file.path(sample_plot_dir, "cd8_high_regions.png"), width = 12, height = 10)
+  save_plot(p_high, file.path(sample_plot_dir, paste0(output_prefix, "_ST_cd8_high_regions.png")), width = 12, height = 10)
   
   # Individual markers
   for (marker in cd8_available) {
@@ -90,11 +94,11 @@ analyze_cd8_spatial <- function(obj_path, sample_name) {
       geom_point(size = 0.3, alpha = 0.85, shape = 16, stroke = 0) +
       scale_color_gradientn(colors = GRADIENT_COLORS, na.value = "#d9d9d9") +
       coord_fixed() + theme_publication() +
-      labs(title = paste(sample_name, "-", marker), color = marker)
-    save_plot(p_marker, file.path(sample_plot_dir, paste0(marker, "_spatial.png")), width = 12, height = 10)
+      labs(title = paste(tissue_label, "-", marker), color = marker)
+    save_plot(p_marker, file.path(sample_plot_dir, paste0(output_prefix, "_ST_", marker, "_spatial.png")), width = 12, height = 10)
   }
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   stats_df <- data.frame(
@@ -105,7 +109,7 @@ analyze_cd8_spatial <- function(obj_path, sample_name) {
     cd8_high_count = sum(obj@meta_obs$cd8_high == "CD8-high"),
     cd8_low_count = sum(obj@meta_obs$cd8_high == "CD8-low")
   )
-  write.csv(stats_df, file.path(sample_table_dir, "cd8_spatial_stats.csv"), row.names = FALSE)
+  write.csv(stats_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_cd8_spatial_stats.csv")), row.names = FALSE)
   
   saveRDS(obj, obj_path)
   cat("Updated object saved.\n")

@@ -44,9 +44,11 @@ process_imc_txt <- function(txt_path) {
   sample_base <- gsub("_\\d+_\\d+$", "", sample_name)
   tissue_type <- get_tissue_from_imc(sample_base)
   tissue_label <- if (!is.na(tissue_type)) get_tissue_label(tissue_type) else "Unknown"
+  output_prefix <- get_output_prefix(sample_base)
   
   cat("\n--- Processing:", sample_name, "---\n")
   cat("Tissue type:", tissue_label, "\n")
+  cat("Output prefix:", output_prefix, "\n")
   cat("Matched Visium sample:", get_matched_visium(sample_base), "\n")
   
   dat <- tryCatch(fread(txt_path, header = TRUE), error = function(e) { cat("Error:", e$message, "\n"); NULL })
@@ -92,9 +94,13 @@ process_imc_txt <- function(txt_path) {
     max = round(apply(expr_norm, 2, max, na.rm = TRUE), 4)
   )
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  # Extract ROI number from sample_name (e.g., "27038840_Biopsy_Spine_1_1" -> "ROI1")
+  roi_num <- gsub(".*_(\\d+)_\\d+$", "\\1", sample_name)
+  roi_label <- paste0("ROI", roi_num)
+  
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
-  write.csv(stats_df, file.path(sample_table_dir, "marker_stats.csv"), row.names = FALSE)
+  write.csv(stats_df, file.path(sample_table_dir, paste0(output_prefix, "_IMC_", roi_label, "_marker_stats.csv")), row.names = FALSE)
   
   # Coordinates
   x_col <- intersect(c("X", "Location_Center_X", "X_centroid", "x"), colnames(dat))[1]
@@ -106,11 +112,12 @@ process_imc_txt <- function(txt_path) {
     cat("  Coordinates extracted from:", x_col, ",", y_col, "\n")
   }
   
-  result <- list(sample = sample_name, expr_raw = expr_mtr, expr_norm = expr_norm, coords = coords, marker_stats = stats_df)
-  saveRDS(result, file.path(OBJ_DIR, paste0(sample_name, "_processed.rds")))
-  cat("  Saved:", file.path(OBJ_DIR, paste0(sample_name, "_processed.rds")), "\n")
+  result <- list(sample = sample_name, expr_raw = expr_mtr, expr_norm = expr_norm, coords = coords, 
+                 marker_stats = stats_df, output_prefix = output_prefix, tissue_label = tissue_label, roi = roi_label)
+  saveRDS(result, file.path(OBJ_DIR, paste0(output_prefix, "_IMC_", roi_label, "_processed.rds")))
+  cat("  Saved:", file.path(OBJ_DIR, paste0(output_prefix, "_IMC_", roi_label, "_processed.rds")), "\n")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   # HIGH-QUALITY marker distribution plot
@@ -124,8 +131,8 @@ process_imc_txt <- function(txt_path) {
     theme_bw(base_size = 12) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 7),
           panel.grid.minor = element_blank()) +
-    labs(title = paste(sample_name, "- Marker Distribution (arcsinh)"), x = "Marker", y = "Expression")
-  save_plot(p_dist, file.path(sample_plot_dir, "marker_distribution.png"), width = 14, height = 6)
+    labs(title = paste(tissue_label, "-", roi_label, "- Marker Distribution (arcsinh)"), x = "Marker", y = "Expression")
+  save_plot(p_dist, file.path(sample_plot_dir, paste0(output_prefix, "_IMC_", roi_label, "_marker_dist.png")), width = 14, height = 6)
   
   # Spatial plot
   if (!is.null(coords)) {
@@ -134,8 +141,8 @@ process_imc_txt <- function(txt_path) {
       geom_point(size = 0.1, alpha = 0.6, shape = 16, stroke = 0) +
       scale_color_gradientn(colors = GRADIENT_COLORS, na.value = "#d9d9d9") +
       coord_fixed() + theme_publication() +
-      labs(title = paste(sample_name, "- Spatial Distribution"), color = "Total Expr")
-    save_plot(p_spatial, file.path(sample_plot_dir, "spatial_overview.png"), width = 10, height = 8)
+      labs(title = paste(tissue_label, "-", roi_label, "- Spatial Distribution"), color = "Total Expr")
+    save_plot(p_spatial, file.path(sample_plot_dir, paste0(output_prefix, "_IMC_", roi_label, "_spatial.png")), width = 10, height = 8)
   }
   
   cat("Done:", sample_name, "\n")

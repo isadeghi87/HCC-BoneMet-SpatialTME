@@ -11,6 +11,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/wnt_ifng"
 TABLE_DIR <- "analysis/tables/wnt_ifng"
@@ -38,6 +39,9 @@ calc_score <- function(expr_mtr, markers, genes) {
 
 analyze_wnt_ifng <- function(obj_path, sample_name) {
   cat("\n--- Processing:", sample_name, "---\n")
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
   obj <- readRDS(obj_path)
   genes <- rownames(getMatrix(obj))
   expr_mtr <- getMatrix(obj, mtr_name = "LogNormalize")
@@ -61,7 +65,7 @@ analyze_wnt_ifng <- function(obj_path, sample_name) {
   coords <- getCoordsDf(obj)
   plot_df <- merge(coords, obj@meta_obs, by = "barcodes")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   scores <- c("wnt_score", "ctnnb1_score", "ifng_score", "hla_i_score")
@@ -81,9 +85,9 @@ analyze_wnt_ifng <- function(obj_path, sample_name) {
   
   if (length(plots) > 0) {
     combined <- wrap_plots(plots[!sapply(plots, is.null)], ncol = 2) +
-      plot_annotation(title = paste(sample_name, "- Wnt/IFNγ Analysis"),
+      plot_annotation(title = paste(tissue_label, "- Wnt/IFNγ Analysis"),
                       theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
-    save_plot(combined, file.path(sample_plot_dir, "wnt_ifng_combined.png"), width = 14, height = 12)
+    save_plot(combined, file.path(sample_plot_dir, paste0(output_prefix, "_ST_wnt_ifng_combined.png")), width = 14, height = 12)
   }
   
   # Correlation analysis: Wnt vs IFNg
@@ -96,9 +100,9 @@ analyze_wnt_ifng <- function(obj_path, sample_name) {
       geom_smooth(method = "lm", se = TRUE, color = "#d62728", linewidth = 1.2) +
       theme_bw(base_size = 14) +
       theme(panel.grid.minor = element_blank()) +
-      labs(title = paste(sample_name, "- Wnt vs IFNγ (r =", round(cor_wnt_ifng, 3), ")"),
+      labs(title = paste(tissue_label, "- Wnt vs IFNγ (r =", round(cor_wnt_ifng, 3), ")"),
            x = "Wnt Score", y = "IFNγ Score")
-    save_plot(p_scatter, file.path(sample_plot_dir, "wnt_ifng_correlation.png"), width = 8, height = 7)
+    save_plot(p_scatter, file.path(sample_plot_dir, paste0(output_prefix, "_ST_wnt_ifng_correlation.png")), width = 8, height = 7)
   }
   
   # Wnt-high zone characteristics
@@ -121,7 +125,7 @@ analyze_wnt_ifng <- function(obj_path, sample_name) {
     }
   }
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   stats_df <- data.frame(
@@ -131,7 +135,7 @@ analyze_wnt_ifng <- function(obj_path, sample_name) {
     ifng_mean = mean(obj@meta_obs$ifng_score, na.rm = TRUE),
     hla_i_mean = mean(obj@meta_obs$hla_i_score, na.rm = TRUE)
   )
-  write.csv(stats_df, file.path(sample_table_dir, "wnt_ifng_stats.csv"), row.names = FALSE)
+  write.csv(stats_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_wnt_ifng_stats.csv")), row.names = FALSE)
   
   saveRDS(obj, obj_path)
   cat("Done:", sample_name, "\n")

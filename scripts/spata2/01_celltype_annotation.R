@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/celltype"
 TABLE_DIR <- "analysis/tables/celltype"
@@ -56,6 +57,13 @@ calc_celltype_score <- function(expr_mtr, markers, genes) {
 
 annotate_celltypes <- function(obj_path, sample_name) {
   cat("\n--- Processing:", sample_name, "---\n")
+  
+  # Get standardized output prefix
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
+  cat("Tissue:", tissue_label, "\n")
+  
   obj <- readRDS(obj_path)
   genes <- rownames(getMatrix(obj))
   expr_mtr <- getMatrix(obj, mtr_name = "LogNormalize")
@@ -115,7 +123,8 @@ annotate_celltypes <- function(obj_path, sample_name) {
   coords <- getCoordsDf(obj)
   plot_df <- merge(coords, obj@meta_obs, by = "barcodes")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  # Use standardized output prefix for folder names
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   # HIGH-QUALITY Cell type spatial map
@@ -123,18 +132,18 @@ annotate_celltypes <- function(obj_path, sample_name) {
     geom_point(size = 0.3, alpha = 0.85, shape = 16, stroke = 0) +
     scale_color_manual(values = CELLTYPE_COLORS, na.value = "#d9d9d9") +
     coord_fixed() + theme_publication() +
-    labs(title = paste(sample_name, "- Cell Types"), color = "Cell Type") +
+    labs(title = paste(tissue_label, "- Cell Types"), color = "Cell Type") +
     guides(color = guide_legend(ncol = 1, override.aes = list(size = 3, alpha = 1)))
-  save_plot(p_celltype, file.path(sample_plot_dir, "celltype_spatial.png"), width = 14, height = 10)
+  save_plot(p_celltype, file.path(sample_plot_dir, paste0(output_prefix, "_celltype_spatial.png")), width = 14, height = 10)
   
   # HIGH-QUALITY Broad category map
   p_broad <- ggplot(plot_df, aes(x = x, y = y, color = celltype_broad)) +
     geom_point(size = 0.3, alpha = 0.85, shape = 16, stroke = 0) +
     scale_color_manual(values = BROAD_COLORS) +
     coord_fixed() + theme_publication() +
-    labs(title = paste(sample_name, "- Broad Categories"), color = "Category") +
+    labs(title = paste(tissue_label, "- Broad Categories"), color = "Category") +
     guides(color = guide_legend(override.aes = list(size = 4, alpha = 1)))
-  save_plot(p_broad, file.path(sample_plot_dir, "celltype_broad_spatial.png"), width = 12, height = 10)
+  save_plot(p_broad, file.path(sample_plot_dir, paste0(output_prefix, "_celltype_broad.png")), width = 12, height = 10)
   
   # Key cell type score maps
   key_scores <- c("hcc_tumour_score", "cd8_t_score", "macrophage_score", "caf_score", "b_cell_score")
@@ -154,30 +163,35 @@ annotate_celltypes <- function(obj_path, sample_name) {
   
   if (length(plots) > 0) {
     combined <- wrap_plots(plots[!sapply(plots, is.null)], ncol = 3) +
-      plot_annotation(title = paste(sample_name, "- Key Cell Type Scores"),
+      plot_annotation(title = paste(tissue_label, "- Key Cell Type Scores"),
                       theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
-    save_plot(combined, file.path(sample_plot_dir, "key_celltype_scores.png"), width = 18, height = 12)
+    save_plot(combined, file.path(sample_plot_dir, paste0(output_prefix, "_celltype_scores.png")), width = 18, height = 12)
   }
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  # Use standardized output prefix for table folder
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   ct_counts <- as.data.frame(table(obj@meta_obs$celltype))
   colnames(ct_counts) <- c("celltype", "count")
   ct_counts$proportion <- ct_counts$count / sum(ct_counts$count)
-  write.csv(ct_counts, file.path(sample_table_dir, "celltype_counts.csv"), row.names = FALSE)
+  ct_counts$tissue <- tissue_label
+  ct_counts$platform <- "ST"
+  write.csv(ct_counts, file.path(sample_table_dir, paste0(output_prefix, "_ST_celltype_counts.csv")), row.names = FALSE)
   
   broad_counts <- as.data.frame(table(obj@meta_obs$celltype_broad))
   colnames(broad_counts) <- c("category", "count")
   broad_counts$proportion <- broad_counts$count / sum(broad_counts$count)
-  write.csv(broad_counts, file.path(sample_table_dir, "celltype_broad_counts.csv"), row.names = FALSE)
+  broad_counts$tissue <- tissue_label
+  broad_counts$platform <- "ST"
+  write.csv(broad_counts, file.path(sample_table_dir, paste0(output_prefix, "_ST_celltype_broad.csv")), row.names = FALSE)
   
   marker_df <- data.frame(
     celltype = names(marker_counts),
     markers_found = unlist(marker_counts),
     markers_total = sapply(CELL_TYPE_MARKERS, length)
   )
-  write.csv(marker_df, file.path(sample_table_dir, "marker_detection.csv"), row.names = FALSE)
+  write.csv(marker_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_marker_detection.csv")), row.names = FALSE)
   
   saveRDS(obj, obj_path)
   cat("\nSaved annotated object:", obj_path, "\n")

@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/cd8_functional"
 TABLE_DIR <- "analysis/tables/cd8_functional"
@@ -36,6 +37,9 @@ calc_score <- function(expr_mtr, markers, genes) {
 
 analyze_cd8_functional <- function(obj_path, sample_name) {
   cat("\n--- Processing:", sample_name, "---\n")
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
   obj <- readRDS(obj_path)
   genes <- rownames(getMatrix(obj))
   expr_mtr <- getMatrix(obj, mtr_name = "LogNormalize")
@@ -64,7 +68,7 @@ analyze_cd8_functional <- function(obj_path, sample_name) {
   coords <- getCoordsDf(obj)
   plot_df <- merge(coords, obj@meta_obs, by = "barcodes")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   
   # Signature scores
@@ -85,9 +89,9 @@ analyze_cd8_functional <- function(obj_path, sample_name) {
   
   if (length(plots) > 0) {
     combined <- wrap_plots(plots[!sapply(plots, is.null)], ncol = 3) +
-      plot_annotation(title = paste(sample_name, "- CD8 Functional States"),
+      plot_annotation(title = paste(tissue_label, "- CD8 Functional States"),
                       theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
-    save_plot(combined, file.path(sample_plot_dir, "functional_states_combined.png"), width = 18, height = 7)
+    save_plot(combined, file.path(sample_plot_dir, paste0(output_prefix, "_ST_functional_states_combined.png")), width = 18, height = 7)
   }
   
   # Effector vs Exhaustion ratio
@@ -99,13 +103,13 @@ analyze_cd8_functional <- function(obj_path, sample_name) {
       scale_color_gradientn(colors = DIVERGING_COLORS, na.value = "#d9d9d9", limits = c(-3, 3), oob = scales::squish) +
       coord_fixed() + theme_publication() +
       theme(legend.key.width = unit(1.5, "cm")) +
-      labs(title = paste(sample_name, "- Effector/Exhaustion Ratio"), 
+      labs(title = paste(tissue_label, "- Effector/Exhaustion Ratio"), 
            subtitle = "Red = Effector dominant, Blue = Exhaustion dominant",
            color = "log2(Eff/Exh)")
-    save_plot(p_ratio, file.path(sample_plot_dir, "effector_exhaustion_ratio.png"), width = 12, height = 10)
+    save_plot(p_ratio, file.path(sample_plot_dir, paste0(output_prefix, "_ST_effector_exhaustion_ratio.png")), width = 12, height = 10)
   }
   
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
   stats_df <- data.frame(
@@ -114,7 +118,7 @@ analyze_cd8_functional <- function(obj_path, sample_name) {
     exhaustion_mean = mean(obj@meta_obs$exhaustion_score, na.rm = TRUE),
     trm_mean = mean(obj@meta_obs$trm_score, na.rm = TRUE)
   )
-  write.csv(stats_df, file.path(sample_table_dir, "signature_stats.csv"), row.names = FALSE)
+  write.csv(stats_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_signature_stats.csv")), row.names = FALSE)
   
   saveRDS(obj, obj_path)
   cat("Done:", sample_name, "\n")

@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
 })
 
 source("scripts/spata2/plot_themes.R")
+source("scripts/spata2/sample_mapping.R")
 
 PLOT_DIR <- "analysis/plots/st_spatial"
 TABLE_DIR <- "analysis/tables/st_spatial"
@@ -236,6 +237,10 @@ analyze_st_spatial <- function(obj_path, sample_name) {
   cat("Processing:", sample_name, "\n")
   cat(strrep("=", 60), "\n")
   
+  output_prefix <- get_output_prefix(sample_name)
+  tissue_label <- get_tissue_label(get_tissue_from_visium(sample_name))
+  cat("Output prefix:", output_prefix, "\n")
+  
   obj <- readRDS(obj_path)
   coords <- getCoordsDf(obj)
   meta <- obj@meta_obs
@@ -255,8 +260,8 @@ analyze_st_spatial <- function(obj_path, sample_name) {
   cat("Cells for spatial analysis:", nrow(coords), "\n")
   cat("Cell types:", length(unique(celltypes)), "\n\n")
   
-  sample_plot_dir <- file.path(PLOT_DIR, sample_name)
-  sample_table_dir <- file.path(TABLE_DIR, sample_name)
+  sample_plot_dir <- file.path(PLOT_DIR, output_prefix)
+  sample_table_dir <- file.path(TABLE_DIR, output_prefix)
   dir.create(sample_plot_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(sample_table_dir, recursive = TRUE, showWarnings = FALSE)
   
@@ -274,7 +279,7 @@ analyze_st_spatial <- function(obj_path, sample_name) {
         value = c(igraph::vcount(graph), igraph::ecount(graph), igraph::edge_density(graph),
                   mean(igraph::degree(graph)), igraph::components(graph)$no)
       )
-      write.csv(graph_stats, file.path(sample_table_dir, "graph_statistics.csv"), row.names = FALSE)
+      write.csv(graph_stats, file.path(sample_table_dir, paste0(output_prefix, "_ST_graph_statistics.csv")), row.names = FALSE)
     }
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
@@ -286,7 +291,7 @@ analyze_st_spatial <- function(obj_path, sample_name) {
     
     cn_df <- as.data.frame(cn$normalized[cn$sample_idx, ])
     cn_df$celltype <- celltypes[cn$sample_idx]
-    write.csv(cn_df, file.path(sample_table_dir, "cellular_neighborhoods.csv"), row.names = FALSE)
+    write.csv(cn_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_cellular_neighborhoods.csv")), row.names = FALSE)
     
     # Summarize by cell type
     cn_summary <- cn_df %>%
@@ -304,9 +309,9 @@ analyze_st_spatial <- function(obj_path, sample_name) {
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
             axis.text.y = element_text(size = 9)) +
-      labs(title = paste(sample_name, "- Cellular Neighborhood Composition"),
+      labs(title = paste(tissue_label, "- Cellular Neighborhood Composition"),
            x = "Cell Type", y = "Neighbor Type", fill = "Proportion")
-    save_plot(p_cn, file.path(sample_plot_dir, "cellular_neighborhoods.png"), width = 12, height = 10)
+    save_plot(p_cn, file.path(sample_plot_dir, paste0(output_prefix, "_ST_cellular_neighborhoods.png")), width = 12, height = 10)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   # 3. Spatial Communities
@@ -316,10 +321,10 @@ analyze_st_spatial <- function(obj_path, sample_name) {
     results$communities <- communities
     
     comm_df <- data.frame(x = coords$x, y = coords$y, celltype = celltypes, community = communities$membership)
-    write.csv(comm_df, file.path(sample_table_dir, "spatial_communities.csv"), row.names = FALSE)
+    write.csv(comm_df, file.path(sample_table_dir, paste0(output_prefix, "_ST_spatial_communities.csv")), row.names = FALSE)
     
     if (nrow(communities$composition) > 0) {
-      write.csv(communities$composition, file.path(sample_table_dir, "community_composition.csv"), row.names = FALSE)
+      write.csv(communities$composition, file.path(sample_table_dir, paste0(output_prefix, "_ST_community_composition.csv")), row.names = FALSE)
     }
     
     # Plot communities
@@ -332,9 +337,9 @@ analyze_st_spatial <- function(obj_path, sample_name) {
         scale_color_manual(values = DISCRETE_COLORS) +
         HQ_THEME() +
         coord_fixed() +
-        labs(title = paste(sample_name, "- Spatial Communities"), x = "X (µm)", y = "Y (µm)", color = "Community") +
+        labs(title = paste(tissue_label, "- Spatial Communities"), x = "X (µm)", y = "Y (µm)", color = "Community") +
         guides(color = guide_legend(override.aes = list(size = 3)))
-      save_plot(p_comm, file.path(sample_plot_dir, "spatial_communities.png"), width = 14, height = 12)
+      save_plot(p_comm, file.path(sample_plot_dir, paste0(output_prefix, "_ST_spatial_communities.png")), width = 14, height = 12)
     }
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
@@ -348,7 +353,7 @@ analyze_st_spatial <- function(obj_path, sample_name) {
       data.frame(celltype = ct, n_patches = patches[[ct]]$n_patches,
                  mean_size = patches[[ct]]$mean_size, max_size = patches[[ct]]$max_size)
     }))
-    write.csv(patch_summary, file.path(sample_table_dir, "patch_summary.csv"), row.names = FALSE)
+    write.csv(patch_summary, file.path(sample_table_dir, paste0(output_prefix, "_ST_patch_summary.csv")), row.names = FALSE)
     
     # Filter to top patches
     patch_summary_top <- patch_summary %>% filter(n_patches > 0) %>% arrange(desc(n_patches)) %>% head(20)
@@ -358,8 +363,8 @@ analyze_st_spatial <- function(obj_path, sample_name) {
       scale_fill_gradientn(colors = GRADIENT_INFERNO) +
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = paste(sample_name, "- Cell Type Patches"), x = "Cell Type", y = "Number of Patches", fill = "Mean Size")
-    save_plot(p_patches, file.path(sample_plot_dir, "patch_detection.png"), width = 12, height = 7)
+      labs(title = paste(tissue_label, "- Cell Type Patches"), x = "Cell Type", y = "Number of Patches", fill = "Mean Size")
+    save_plot(p_patches, file.path(sample_plot_dir, paste0(output_prefix, "_ST_patch_detection.png")), width = 12, height = 7)
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
   # 5. Interaction Enrichment
@@ -376,9 +381,9 @@ analyze_st_spatial <- function(obj_path, sample_name) {
     interactions <- compute_st_interaction_enrichment(coords_top, celltypes_top, radius = 50, n_permutations = 30)
     results$interactions <- interactions
     
-    write.csv(interactions$observed, file.path(sample_table_dir, "interaction_observed.csv"))
-    write.csv(interactions$z_scores, file.path(sample_table_dir, "interaction_zscore.csv"))
-    write.csv(interactions$p_values, file.path(sample_table_dir, "interaction_pvalues.csv"))
+    write.csv(interactions$observed, file.path(sample_table_dir, paste0(output_prefix, "_ST_interaction_observed.csv")))
+    write.csv(interactions$z_scores, file.path(sample_table_dir, paste0(output_prefix, "_ST_interaction_zscore.csv")))
+    write.csv(interactions$p_values, file.path(sample_table_dir, paste0(output_prefix, "_ST_interaction_pvalues.csv")))
     
     # Z-score heatmap
     z_melt <- melt(interactions$z_scores)
@@ -390,17 +395,17 @@ analyze_st_spatial <- function(obj_path, sample_name) {
       scale_fill_gradientn(colors = DIVERGENT_RDBU, limits = c(-5, 5)) +
       HQ_THEME() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = paste(sample_name, "- Cell Type Interaction Enrichment"),
+      labs(title = paste(tissue_label, "- Cell Type Interaction Enrichment"),
            subtitle = "Z-score: >0 enriched (red), <0 avoided (blue)",
            x = "Target", y = "Source", fill = "Z-score")
-    save_plot(p_zscore, file.path(sample_plot_dir, "interaction_enrichment.png"), width = 11, height = 9)
+    save_plot(p_zscore, file.path(sample_plot_dir, paste0(output_prefix, "_ST_interaction_enrichment.png")), width = 11, height = 9)
     
     # Significant interactions
     sig_int <- z_melt %>%
       left_join(melt(interactions$p_values) %>% rename(Source = Var1, Target = Var2, p_value = value), by = c("Source", "Target")) %>%
       filter(p_value < 0.05) %>%
       arrange(desc(abs(Z_score)))
-    write.csv(sig_int, file.path(sample_table_dir, "significant_interactions.csv"), row.names = FALSE)
+    write.csv(sig_int, file.path(sample_table_dir, paste0(output_prefix, "_ST_significant_interactions.csv")), row.names = FALSE)
     cat("    Significant interactions:", nrow(sig_int), "\n")
   }, error = function(e) cat("  Error:", e$message, "\n"))
   
